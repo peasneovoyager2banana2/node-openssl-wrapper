@@ -1,5 +1,4 @@
-
-import {spawn} from 'child_process';
+import { spawn } from 'child_process'
 
 const isFunction = maybeFunction => typeof maybeFunction === 'function';
 
@@ -12,13 +11,14 @@ const expectedStderrForAction = {
   'rsa': /^writing rsa key/i,
   'smime.verify': /^verification successful/i,
   'x509.req': /^signature ok/i
-};
+}
 
 export default function exec(action, maybeBuffer, maybeOptions, maybeCallback) {
   // Support option re-ordering
-  let buffer = maybeBuffer;
-  let options = maybeOptions;
-  let callback = maybeCallback;
+  let
+    buffer = maybeBuffer,
+    options = maybeOptions,
+    callback = maybeCallback
   if (!Buffer.isBuffer(buffer)) {
     callback = options;
     options = buffer;
@@ -32,64 +32,67 @@ export default function exec(action, maybeBuffer, maybeOptions, maybeCallback) {
   // Build initial params with passed action
   let params = action.split('.').map((value, key) => (!key ? value : `-${value}`));
   const lastParams = [];
-  Object.keys(options).forEach(key => {
-    if (options[key] === false) {
-      lastParams.push(key);
-    } else if (options[key] === true) {
-      params.push(`-${key}`);
-    } else {
-      if (Array.isArray(options[key])) {
-        options[key].forEach(value => {
-          params.push(`-${key}`, value);
-        });
-      } else {
-        params.push(`-${key}`, options[key]);
+  for (const [key, value] of Object.entries(options)) {
+    switch (value) {
+      case false: lastParams.push(key); break
+      case true: params.push(`-${key}`); break
+      default: {
+        let itr = (
+          typeof value === "object"
+          || typeof value === "function"
+          ? value[Symbol.iterator] : void 0
+        )
+        if (typeof itr !== "function") {
+          params.push(`${key}`, value);
+        } else for (const itrValue of itr.call(value)) {
+          params.push(`-${key}`, itrValue);
+        }
       }
     }
-  });
+  }
   // Append last params
   params = params.concat(lastParams);
 
   // Actually spawn openssl command
-  const openssl = spawn('openssl', params);
-  const outResult = [];
-  let outLength = 0;
-  const errResult = [];
-  let errLength = 0;
+  const
+    openssl = spawn('openssl', params),
+    outResult = [], errResult = []
+  let outLength = 0, errLength = 0;
 
   openssl.stdout.on('data', data => {
-    outLength += data.length;
-    outResult.push(data);
-  });
+    outLength += data.length
+    outResult.push(data)
+  })
 
   openssl.stderr.on('data', data => {
-    errLength += data.length;
-    errResult.push(data);
-  });
+    errLength += data.length
+    errResult.push(data)
+  })
 
   openssl.on('close', code => {
-    const stdout = Buffer.concat(outResult, outLength);
-    const stderr = Buffer.concat(errResult, errLength).toString('utf8');
-    const expectedStderr = expectedStderrForAction[action];
-    let err = null;
+    const
+      stdout = Buffer.concat(outResult, outLength),
+      stderr = Buffer.concat(errResult, errLength).toString('utf8'),
+      expectedStderr = expectedStderrForAction[action]
+    let err = null
 
     if (code || (stderr && expectedStderr && !stderr.match(expectedStderr))) {
-      err = new Error(stderr);
-      err.code = code;
+      err = new Error(stderr)
+      err.code = code
     }
 
     if (isFunction(callback)) {
-      callback.apply(null, [err, stdout]);
+      callback.apply(null, [err, stdout])
     }
-  });
+  })
 
   if (buffer) {
-    openssl.stdin.write(buffer);
+    openssl.stdin.write(buffer)
   }
 
-  openssl.stdin.end();
+  openssl.stdin.end()
 
-  return openssl;
+  return openssl
 }
 
-export {exec};
+export { exec }
